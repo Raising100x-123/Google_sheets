@@ -1,6 +1,6 @@
 Flask
-gunicorn
-gspread
 pymongo
-python-dotenv
+gspread
 google-auth
+python-dotenv
+gunicorn

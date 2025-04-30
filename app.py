@@ -1,30 +1,33 @@
 import os
 import sys
 import json
-import gspread
-from flask import Flask
-from dotenv import load_dotenv
-from pymongo import MongoClient
-from google.oauth2.service_account import Credentials
 import threading
+from dotenv import load_dotenv
+from flask import Flask
+from pymongo import MongoClient
+import gspread
+from google.oauth2.service_account import Credentials
 
-# Load env
+# Load environment variables
 load_dotenv()
 
-app = Flask(__name__)  # 👈 Required for gunicorn to find
+# === Flask app ===
+app = Flask(__name__)
 
-# MongoDB Setup
+# === MongoDB Setup ===
 MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
-    print("❌ Error: MONGO_URI not set")
+    print("❌ Error: MONGO_URI environment variable is not set")
     sys.exit(1)
 
-# Google Sheets Setup
+# === Google Sheet Setup ===
 GOOGLE_SHEET_CREDENTIALS = os.getenv("GOOGLE_SHEET_CREDENTIALS")
 SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE", "google-credentials.json")
 
-print(f"💡 MONGO_URI exists: {bool(MONGO_URI)}")
-print(f"💡 GOOGLE_SHEET_CREDENTIALS exists: {bool(GOOGLE_SHEET_CREDENTIALS)}")
+# Debug logs
+print(f"💡 Debug - MONGO_URI exists: {bool(MONGO_URI)}")
+print(f"💡 Debug - GOOGLE_SHEET_CREDENTIALS exists: {bool(GOOGLE_SHEET_CREDENTIALS)}")
+print(f"💡 Debug - SERVICE_ACCOUNT_FILE path: {SERVICE_ACCOUNT_FILE}")
 
 scopes = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -33,34 +36,48 @@ scopes = [
 
 try:
     if GOOGLE_SHEET_CREDENTIALS:
-        with open(SERVICE_ACCOUNT_FILE, 'w') as f:
-            f.write(GOOGLE_SHEET_CREDENTIALS)
-        print(f"✅ Wrote credentials to {SERVICE_ACCOUNT_FILE}")
-        credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+        try:
+            with open(SERVICE_ACCOUNT_FILE, 'w') as f:
+                f.write(GOOGLE_SHEET_CREDENTIALS)
+            print(f"✅ Created credentials file at {SERVICE_ACCOUNT_FILE}")
+            credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
+        except Exception as file_error:
+            print(f"⚠️ Could not write credentials file: {file_error}")
+            try:
+                service_account_info = json.loads(GOOGLE_SHEET_CREDENTIALS)
+                credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+                print("✅ Created credentials from environment variable JSON string")
+            except Exception as json_error:
+                print(f"❌ Error parsing credentials JSON: {json_error}")
+                sys.exit(1)
     elif os.path.exists(SERVICE_ACCOUNT_FILE):
+        print(f"✅ Using existing credentials file at {SERVICE_ACCOUNT_FILE}")
         credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
     else:
-        raise Exception("No credentials found")
+        print("❌ Error: No Google credentials available.")
+        sys.exit(1)
 
-    gspread_client = gspread.authorize(credentials)
-    spreadsheet = gspread_client.open("Lead_Data")
+    client = gspread.authorize(credentials)
+    spreadsheet = client.open("Lead_Data")
     sheet = spreadsheet.sheet1
-    print("✅ Connected to Google Sheet")
-except Exception as e:
-    print(f"❌ Google Auth Error: {e}")
+    print("✅ Successfully connected to Google Sheet")
+
+except Exception as auth_error:
+    print(f"❌ Error setting up Google authentication: {auth_error}")
     sys.exit(1)
 
+# === MongoDB connection ===
 try:
     mongo_client = MongoClient(MONGO_URI)
     mongo_client.admin.command('ping')
+    print("✅ Successfully connected to MongoDB")
     db = mongo_client["ChatbotDB"]
     collection = db["lead_data"]
-    print("✅ Connected to MongoDB")
-except Exception as e:
-    print(f"❌ MongoDB Error: {e}")
+except Exception as mongo_error:
+    print(f"❌ Error connecting to MongoDB: {mongo_error}")
     sys.exit(1)
 
-
+# === Helper functions ===
 def find_row_by_session_id(session_id):
     try:
         records = sheet.get_all_records()
@@ -69,9 +86,8 @@ def find_row_by_session_id(session_id):
                 return idx
         return None
     except Exception as e:
-        print(f"❌ Find row error: {e}")
+        print(f"❌ Error finding row: {e}")
         return None
-
 
 def upsert_google_sheet(doc):
     try:
@@ -100,16 +116,17 @@ def upsert_google_sheet(doc):
         ]
 
         row_number = find_row_by_session_id(session_id)
+
         if row_number:
             sheet.update(f'A{row_number}:I{row_number}', [row_data])
-            print(f"✅ Updated session_id {session_id}")
+            print(f"✅ Updated session_id {session_id} at row {row_number}")
         else:
             sheet.append_row(row_data)
-            print(f"✅ Inserted session_id {session_id}")
+            print(f"✅ Inserted new session_id {session_id}")
     except Exception as e:
-        print(f"❌ Upsert error: {e}")
+        print(f"❌ Error in upsert_google_sheet: {e}")
 
-
+# === Change Stream Watcher ===
 def watch_changes():
     print("⏳ Watching MongoDB...")
     try:
@@ -122,16 +139,15 @@ def watch_changes():
         print(f"❌ Change stream error: {e}")
         sys.exit(1)
 
-
-# 🔁 Run the change stream watcher in a separate thread
+# Start background thread on first request
 @app.before_first_request
 def start_background_thread():
     thread = threading.Thread(target=watch_changes)
     thread.daemon = True
     thread.start()
 
-# 🧪 A simple route for Render health check
-@app.route('/')
+# Simple route to verify deployment
+@app.route("/")
 def index():
-    return "✅ Server is running and connected!"
+    return "✅ Flask app is running. MongoDB and Google Sheet are connected."
 
