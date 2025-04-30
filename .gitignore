@@ -1,0 +1,36 @@
+# Environment variables
+.env
+
+# Google service account credentials
+*.json
+raising100x-458210-91b255678e66.json
+
+# Python virtual environment
+venv/
+env/
+.venv/
+.python-version
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Log files
+*.log
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
