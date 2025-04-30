@@ -4,10 +4,9 @@ from pymongo import MongoClient
 import os
 import json
 from dotenv import load_dotenv
-import io
 import sys
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # MongoDB Setup
@@ -17,7 +16,7 @@ if not MONGO_URI:
     sys.exit(1)
 
 # Google Sheets credentials setup
-# First check if credentials are provided as a string in environment variable
+# Check if credentials are provided as a string in environment variable
 GOOGLE_SHEET_CREDENTIALS = os.getenv("GOOGLE_SHEET_CREDENTIALS")
 SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE", "google-credentials.json")
 
@@ -35,8 +34,8 @@ scopes = [
 try:
     # If credentials are provided as environment variable string
     if GOOGLE_SHEET_CREDENTIALS:
-        # Method 1: Write to file then use from_service_account_file
         try:
+            # Method 1: Write to file then use from_service_account_file
             with open(SERVICE_ACCOUNT_FILE, 'w') as f:
                 f.write(GOOGLE_SHEET_CREDENTIALS)
             print(f"✅ Created credentials file at {SERVICE_ACCOUNT_FILE}")
@@ -52,17 +51,17 @@ try:
             except Exception as json_error:
                 print(f"❌ Error parsing credentials JSON: {json_error}")
                 sys.exit(1)
-    # If the file already exists (local development)
+    # If the file already exists (local development or fallback)
     elif os.path.exists(SERVICE_ACCOUNT_FILE):
         print(f"✅ Using existing credentials file at {SERVICE_ACCOUNT_FILE}")
         credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scopes)
     else:
         print("❌ Error: No Google credentials available. Set GOOGLE_SHEET_CREDENTIALS or provide a service account file.")
         sys.exit(1)
-        
+
     # Google Sheets setup
     client = gspread.authorize(credentials)
-    
+
     # Open Google Sheet - add error handling here
     try:
         spreadsheet = client.open("Lead_Data")
@@ -71,12 +70,12 @@ try:
     except Exception as sheet_error:
         print(f"❌ Error opening Google Sheet: {sheet_error}")
         sys.exit(1)
-        
+
 except Exception as auth_error:
     print(f"❌ Error setting up Google authentication: {auth_error}")
     sys.exit(1)
 
-# MongoDB connection
+# MongoDB connection setup
 try:
     mongo_client = MongoClient(MONGO_URI)
     # Test the connection

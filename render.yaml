@@ -1,0 +1,14 @@
+
+services:
+  - type: worker
+    name: mongodb-sheets-sync
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: GOOGLE_SHEET_CREDENTIALS
+        sync: false
+      - key: SERVICE_ACCOUNT_FILE
+        value: google-credentials.json
